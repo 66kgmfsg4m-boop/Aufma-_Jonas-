@@ -1,0 +1,10 @@
+services:
+  aufmass:
+    build: .
+    ports:
+      - "47291:47291"
+    volumes:
+      - aufmass-data:/app/data
+
+volumes:
+  aufmass-data:
