@@ -308,7 +308,8 @@ function EmptyLibrary({ sampling, onSample }: { sampling: boolean; onSample: () 
       <p className="text-lg font-medium">Noch keine Bauteile in der Bibliothek</p>
       <p className="mt-2 max-w-xl text-sm leading-relaxed text-muted-foreground">
         Lade eine Rechnung oder einen Preiskatalog hoch. Stück- und Meterpreise werden daraus
-        gelesen, du prüfst die Positionen, und danach kannst du sie hier suchen.
+        gelesen, du prüfst die Positionen, und danach kannst du sie hier suchen. Der Beispielbestand
+        enthält Kataloge und zwei Großhandelsrechnungen.
       </p>
       <ol className="mt-5 grid gap-3 text-sm md:grid-cols-3">
         {["Datei hochladen", "Preise prüfen", "Bauteil suchen"].map((step, index) => (

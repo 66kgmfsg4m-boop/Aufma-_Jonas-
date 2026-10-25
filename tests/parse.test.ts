@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { describe, it } from "node:test";
 import { buildParsed } from "../src/lib/parse/build.ts";
@@ -110,6 +111,71 @@ describe("invoice lines", () => {
   });
 });
 
+describe("invoice continuations", () => {
+  it("maps warenbezeichnung and keeps the manufacturer in the name", () => {
+    const extracted = extractSheet([
+      ["Hersteller", "Artikelnummer", "Warenbezeichnung", "Menge", "Preis", "Rabatt", "Gesamt"],
+      ["Hager", "04.KZ059", "Hager KZ059 Berührungsschutzabdeckung", "5,00", "1,28", "", "6,40"],
+      ["", "oxgutschein", "Emarsys Welcome 10€ Gutschein", "1,00", "-10,00", "", "-10,00"],
+      ["Jonas Zimmer", "", "", "", "", "", ""],
+      ["Lerchenweg 6", "", "", "", "", "", ""],
+    ]);
+    assert.equal(extracted.mapping.name, 2);
+    assert.equal(extracted.items.length, 1);
+    assert.equal(extracted.items[0]?.articleNumber, "04.KZ059");
+    assert.match(extracted.items[0]?.name ?? "", /Berührungsschutzabdeckung/);
+    assert.equal(extracted.items[0]?.unitPrice, 1.28);
+    assert.equal(extracted.items[0]?.unit, "Stk");
+  });
+
+  it("merges pack lines and divides the pack price once", () => {
+    const extracted = extractSheet([
+      ["Pos.", "Artikelnr.", "Menge", "Bezeichnung", "MwSt.", "Einzelpreis", "Gesamtpreis"],
+      ["1", "552451", "1", "Abzweigdose, PVC, IP54", "19%", "6,50", "6,50"],
+      ["", "", "", "10 Stück", "", "", ""],
+      ["2", "550514", "1", "Abdeckstreifen, 12 Einheiten", "19%", "1,62", "1,62"],
+      ["", "", "", "lichtgrau", "", "", ""],
+      ["3", "551377", "1", "Hohlwanddose Ø 68mm", "19%", "11,88", "11,88"],
+      ["", "", "", "25 St.", "", "", ""],
+    ]);
+    const box = extracted.items.find((item) => item.articleNumber === "552451");
+    assert.ok(box);
+    assert.equal(box.unitPrice, 0.65);
+    assert.equal(box.unit, "Stk");
+    assert.match(box.name, /10 Stück/);
+    const strip = extracted.items.find((item) => item.articleNumber === "550514");
+    assert.equal(strip?.unitPrice, 1.62);
+    assert.match(strip?.name ?? "", /lichtgrau/);
+    const dose = extracted.items.find((item) => item.articleNumber === "551377");
+    assert.equal(dose?.unitPrice, 0.4752);
+    assert.equal(extracted.items.length, 3);
+  });
+
+  it("turns meterware into a meter price and leaves stick goods whole", () => {
+    const extracted = extractSheet([
+      ["Hersteller", "Artikelnummer", "Warenbezeichnung", "Menge", "Preis", "Rabatt", "Gesamt"],
+      ["Lapp Kabel", "X7633320-100", "Ölflex Classic 110 Meterware 100", "1,00", "128,90", "", "128,90"],
+      ["", "Bestellte Menge 1x100 Meter", "", "", "", "", ""],
+      ["", "", "Zuschnittkosten von 10.9 € pro Stück enthalten", "", "", "", ""],
+      ["Fränkische", "28.22220020", "FPKu-EM-F 20 2m Stangenrohr", "5,00", "2,18", "", "10,90"],
+      ["diverse", "00317", "NYM-J 3x1,5mm² 100 Meter", "1,00", "92,08", "", "92,08"],
+    ]);
+    const cable = extracted.items.find((item) => item.articleNumber === "X7633320-100");
+    assert.ok(cable);
+    assert.equal(cable.unit, "m");
+    assert.equal(cable.unitPrice, 1.289);
+    assert.match(cable.name, /1x100 Meter/);
+    assert.match(cable.name, /Zuschnittkosten/);
+    const stick = extracted.items.find((item) => item.articleNumber === "28.22220020");
+    assert.equal(stick?.unit, "Stk");
+    assert.equal(stick?.unitPrice, 2.18);
+    const nym = extracted.items.find((item) => item.articleNumber === "00317");
+    assert.equal(nym?.unit, "m");
+    assert.equal(nym?.unitPrice, 0.9208);
+    assert.equal(extracted.items.some((item) => /lerchenweg|gutschein/i.test(item.name)), false);
+  });
+});
+
 describe("pdf", () => {
   it("extracts a positioned invoice table", async () => {
     const stream = [
@@ -144,7 +210,48 @@ describe("pdf", () => {
     assert.equal(parsed.items[0]?.unitPrice, 0.89);
     assert.equal(parsed.items[0]?.quantity, 120);
   });
+
+  it("reads the Pollin and Wandelt example invoices", async () => {
+    const pollin = await readExample("examples/Rechnung.pdf", "Rechnung.pdf");
+    const relay = pollin.items.find((item) => item.articleNumber === "554730");
+    assert.ok(relay);
+    assert.match(relay.name, /ELTAKO/);
+    assert.match(relay.name, /16 A/);
+    assert.equal(relay.unitPrice, 13.55);
+    assert.equal(relay.unit, "Stk");
+    const box = pollin.items.find((item) => item.articleNumber === "552451");
+    assert.equal(box?.unitPrice, 0.65);
+    const dose = pollin.items.find((item) => item.articleNumber === "551377");
+    assert.equal(dose?.unitPrice, 0.4752);
+    const modules = pollin.items.find((item) => item.articleNumber === "550514");
+    assert.equal(modules?.unitPrice, 1.62);
+    const wago = pollin.items.find((item) => item.articleNumber === "550958");
+    assert.equal(wago?.unitPrice, 0.135);
+    assert.equal(pollin.items.some((item) => /lerchenweg|gutschein|versandkosten|jonas zimmer/i.test(`${item.name} ${item.articleNumber}`)), false);
+
+    const wandelt = await readExample("examples/Rechnung42295692.pdf", "Rechnung42295692.pdf");
+    const cover = wandelt.items.find((item) => item.articleNumber === "04.KZ059");
+    assert.ok(cover);
+    assert.match(cover.name, /Berührungsschutzabdeckung/);
+    assert.equal(cover.unitPrice, 1.28);
+    assert.equal(cover.unit, "Stk");
+    const oil = wandelt.items.find((item) => item.articleNumber === "X7633320-100");
+    assert.equal(oil?.unit, "m");
+    assert.equal(oil?.unitPrice, 1.289);
+    const stick = wandelt.items.find((item) => item.articleNumber === "28.22220020");
+    assert.equal(stick?.unit, "Stk");
+    assert.equal(stick?.unitPrice, 2.18);
+    const nym = wandelt.items.find((item) => item.articleNumber === "00317");
+    assert.equal(nym?.unit, "m");
+    assert.equal(nym?.unitPrice, 0.9208);
+    assert.equal(wandelt.items.some((item) => /lerchenweg|gutschein|oxgutschein|askay/i.test(`${item.name} ${item.articleNumber}`)), false);
+  });
 });
+
+async function readExample(file: string, filename: string) {
+  const read = await readPdf(new Uint8Array(readFileSync(file)));
+  return buildParsed({ filename, kind: "pdf", sheets: read.sheets, warnings: read.warnings });
+}
 
 function buildPdf(contentStream: string): Uint8Array {
   const objects = [

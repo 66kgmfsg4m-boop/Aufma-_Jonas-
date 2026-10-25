@@ -22,6 +22,7 @@ const SPECS: Spec[] = [
   { field: "article", token: "ean", weight: 36 },
   { field: "article", token: "artikel", weight: 24 },
   { field: "name", token: "artikelbezeichnung", weight: 100 },
+  { field: "name", token: "warenbezeichnung", weight: 98 },
   { field: "name", token: "bezeichnung", weight: 92 },
   { field: "name", token: "beschreibung", weight: 86 },
   { field: "name", token: "kurztext", weight: 84 },
@@ -70,7 +71,10 @@ function headerMatches(header: string, token: string): boolean {
   const before = index === 0 || header[index - 1] === " ";
   const after =
     index + token.length === header.length || header[index + token.length] === " ";
-  return before && after;
+  if (before && after) return true;
+  // "Warenbezeichnung" carries "bezeichnung" as the tail of the same word.
+  const previous = header[index - 1];
+  return token.length >= 8 && after && index > 0 && !!previous && /[a-z]/.test(previous);
 }
 
 function ignored(header: string): boolean {

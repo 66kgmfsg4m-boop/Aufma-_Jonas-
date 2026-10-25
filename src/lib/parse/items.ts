@@ -1,8 +1,10 @@
 import { findHeaderRow, inferMapping, remapByLabel } from "@/lib/parse/columns";
 import {
+  fold,
   isSummaryLabel,
   isUnitToken,
   looksLikeArticle,
+  normalizeHeader,
   normalizeUnit,
   parseGermanNumber,
   parsePriceCell,
@@ -213,6 +215,163 @@ export function parseFreeformLine(line: string, sheet = ""): ExtractedItem | nul
   return itemFromMappedRow(row, mapping, sheet);
 }
 
+const NOISE =
+  /gutschein|versandkosten|\bversand\b|sperrgut|neukunden|begruessung|uebertrag|vortrag|lieferschein|amtsgericht|ust-?id|steuer-?nr|geschaeftsfuehrer|\bwww\b|e-mail|\btel\b|\bfax\b|\biban\b|\bseite\b|kunden-?nummer|kunden nr|zwischensumme|endbetrag|gesamtbetrag|warenwert|zahlungsbedingung|rechnungsdatum|gerichtsstand|aufbewahrung|eigentum|amazon payments|geschaeftsbedingungen|\bpaket\b|\bgewicht\b|\bwkz\b|\bnetto\b|\bmwst\b|\brechnung\b|\bauftrag\b/;
+
+function round6(value: number): number {
+  return Math.round(value * 1_000_000) / 1_000_000;
+}
+
+function isServiceText(value: string): boolean {
+  const normalized = fold(value);
+  return /gutschein|versandkosten|\bversand\b|sperrgut|neukunden|begruessung|\bporto\b/.test(normalized);
+}
+
+function isAddressLike(text: string): boolean {
+  const normalized = fold(text).trim();
+  if (!normalized || normalized.length > 90) return false;
+  if (/(strasse|str\.|weg|platz|allee|gasse)\s*\d/.test(normalized)) return true;
+  const words = normalized.split(/\s+/).filter(Boolean);
+  if (/\b\d{5}\b/.test(normalized) && words.length <= 6) return true;
+  if (/^(deutschland|germany|oesterreich|schweiz)$/.test(normalized)) return true;
+  if (/^(herr|frau)(\s|$)/.test(normalized)) return true;
+  return false;
+}
+
+function isPersonLine(text: string): boolean {
+  const trimmed = text.trim();
+  if (!trimmed || trimmed.length > 40 || /\d/.test(trimmed)) return false;
+  return /^[A-ZÄÖÜ][a-zäöü]+(?:\s+[A-ZÄÖÜ][a-zäöü]+){1,3}$/.test(trimmed);
+}
+
+function isTotalsRow(row: string[]): boolean {
+  const text = clean(row.filter(Boolean).join(" "));
+  const letters = text.replace(/[^A-Za-zÄÖÜäöüß]/g, "");
+  const prices = text.match(/\d+[.,]\d{2}/g) ?? [];
+  return letters.length <= 4 && prices.length >= 2;
+}
+
+function isLooseProse(text: string): boolean {
+  if (text.length < 100) return false;
+  const normalized = fold(text);
+  if (/(stueck|meterware|\d+\s*mm|\bip\d|polig)/.test(normalized)) return false;
+  return text.split(/\s+/).filter(Boolean).length > 12;
+}
+
+function isCompanyChrome(text: string): boolean {
+  const normalized = fold(text);
+  if (!/gmbh|aktiengesellschaft|\bhbr\b|amtsgericht/.test(normalized)) return false;
+  return /\b\d{5}\b|www|tel|fax|strasse|ust|steuer|kundenservice|geschaeftsfuehrer/.test(normalized);
+}
+
+function isRowNoise(row: string[]): boolean {
+  const joined = clean(row.join(" "));
+  if (!joined) return true;
+  if (joined.length > 180 || isLooseProse(joined)) return true;
+  if (isSummaryLabel(joined) || isTotalsRow(row)) return true;
+  if (NOISE.test(fold(joined)) || isCompanyChrome(joined)) return true;
+  if (isAddressLike(joined) || isPersonLine(joined)) return true;
+  return false;
+}
+
+function rowUnitPrice(row: string[], mapping: ColumnMapping): number | null {
+  if (mapping.unitPrice == null) return null;
+  return parsePriceCell(row[mapping.unitPrice] ?? "", true);
+}
+
+function rowHasMoney(row: string[], mapping: ColumnMapping): boolean {
+  const unitPrice = rowUnitPrice(row, mapping);
+  const total =
+    mapping.totalPrice == null ? null : parsePriceCell(row[mapping.totalPrice] ?? "", true);
+  return (unitPrice != null && unitPrice !== 0) || (total != null && total !== 0);
+}
+
+function manufacturerIndex(headers: string[]): number | null {
+  for (let index = 0; index < headers.length; index += 1) {
+    const header = normalizeHeader(headers[index] ?? "");
+    if (header === "hersteller" || header === "marke" || header === "fabrikat") return index;
+  }
+  return null;
+}
+
+function withManufacturer(row: string[], mapping: ColumnMapping, headers: string[]): string[] {
+  const column = manufacturerIndex(headers);
+  if (column == null || mapping.name == null) return row;
+  const brand = clean(row[column]);
+  const name = clean(row[mapping.name]);
+  if (!brand || !name) return row;
+  if (fold(brand) === "diverse" || fold(brand) === "verschiedene") return row;
+  if (fold(name).includes(fold(brand))) return row;
+  const copy = row.slice();
+  copy[mapping.name] = `${brand} ${name}`;
+  return copy;
+}
+
+function fragmentText(row: string[], mapping: ColumnMapping): string {
+  const skip = new Set(
+    [mapping.unitPrice, mapping.totalPrice, mapping.quantity, mapping.priceBasis].filter(
+      (index): index is number => index != null,
+    ),
+  );
+  const parts: string[] = [];
+  row.forEach((cell, index) => {
+    if (skip.has(index)) return;
+    const value = clean(cell);
+    if (!value || value.includes("%")) return;
+    if (/^\d{1,3}$/.test(value)) return;
+    if (parsePriceCell(value, true) != null && !/[A-Za-zÄÖÜäöüß]/.test(value)) return;
+    parts.push(value);
+  });
+  return parts.join(" ");
+}
+
+function packCount(text: string): number | null {
+  const match = fold(text).match(/\b(\d{1,4})(?:\s*(stueck|stuecke|stck|stk)|\s+(st\.|st))\b/);
+  if (!match) return null;
+  const count = Number(match[1]);
+  return count > 1 ? count : null;
+}
+
+function meterCount(continuation: string, name: string): number | null {
+  const ordered = fold(continuation).match(/\b\d+\s*x\s*(\d{2,5})\s*m(?:eter)?\b/);
+  if (ordered) return Number(ordered[1]);
+  const soldAsLength = fold(name).match(/meterware\s+(\d{2,5})/);
+  if (soldAsLength) return Number(soldAsLength[1]);
+  const named = fold(`${name} ${continuation}`).match(/\b(\d{2,5})\s*meter\b/);
+  if (named) return Number(named[1]);
+  return null;
+}
+
+function applySalesUnit(item: ExtractedItem, continuation: string): void {
+  const derived = item.note.includes("Einzelpreis aus Menge");
+  if (!item.unit) item.unit = "Stk";
+  const basisAlreadyApplied = item.priceBasis > 1;
+  const pack = basisAlreadyApplied ? null : (packCount(continuation) ?? packCount(item.name));
+  const meters = basisAlreadyApplied || pack ? null : meterCount(continuation, item.name);
+  if (pack && item.unitPrice != null) {
+    item.unitPrice = round6(item.unitPrice / pack);
+    item.priceBasis = pack;
+    item.unit = "Stk";
+    item.note = [item.note, `Packung ${pack} Stück: Stückpreis aus dem Packungspreis berechnet`]
+      .filter(Boolean)
+      .join(" ");
+  } else if (meters && meters >= 10 && item.unitPrice != null) {
+    item.unitPrice = round6(item.unitPrice / meters);
+    item.priceBasis = meters;
+    item.unit = "m";
+    item.note = [item.note, `Länge ${meters} m: Meterpreis aus dem Positionspreis berechnet`]
+      .filter(Boolean)
+      .join(" ");
+  }
+  item.confidence = confidenceFor({
+    articleNumber: item.articleNumber,
+    name: item.name,
+    unit: item.unit,
+    unitPrice: item.unitPrice,
+    derived,
+  });
+}
+
 function isRepeatedHeader(row: string[], headers: string[]): boolean {
   const left = row.map((cell) => cell.trim().toLowerCase()).filter(Boolean).join("|");
   const right = headers.map((cell) => cell.trim().toLowerCase()).filter(Boolean).join("|");
@@ -261,21 +420,72 @@ export function extractSheet(
   const structured = mapping.article != null || mapping.name != null || mapping.unitPrice != null || mapping.totalPrice != null;
   const items: ExtractedItem[] = [];
   const start = headerIndex >= 0 ? headerIndex + 1 : 0;
+  let pending: ExtractedItem | null = null;
+  let continuation: string[] = [];
+
+  const flush = () => {
+    if (!pending) return;
+    const extra = continuation.join(" ");
+    if (extra) {
+      const folded = fold(pending.name);
+      if (!folded.includes(fold(extra))) pending.name = clean(`${pending.name} ${extra}`);
+    }
+    applySalesUnit(pending, extra);
+    if (pending.unitPrice != null && pending.unitPrice > 0 && !isServiceText(`${pending.articleNumber} ${pending.name}`)) {
+      items.push(pending);
+    }
+    pending = null;
+    continuation = [];
+  };
+
   for (let index = start; index < rows.length; index += 1) {
     const row = rows[index] ?? [];
     if (!row.some(Boolean)) continue;
     if (headerIndex >= 0 && isRepeatedHeader(row, rows[headerIndex] ?? [])) continue;
-    const item = structured ? itemFromMappedRow(row, mapping, sheet) : heuristicItem(row, sheet);
-    if (!item) continue;
-    items.push(item);
+    if (!structured) {
+      const item = heuristicItem(row, sheet);
+      if (!item) continue;
+      applySalesUnit(item, "");
+      if (item.unitPrice != null && item.unitPrice > 0) items.push(item);
+    } else {
+      const prepared = withManufacturer(row, mapping, headers);
+      const article = clean(mapping.article == null ? "" : prepared[mapping.article]);
+      const candidate = itemFromMappedRow(prepared, mapping, sheet);
+      const priced = rowHasMoney(prepared, mapping);
+      const usable =
+        candidate != null &&
+        candidate.unitPrice != null &&
+        candidate.unitPrice > 0 &&
+        priced &&
+        !isServiceText(`${article} ${candidate.name}`) &&
+        (looksLikeArticle(article) || candidate.name.length >= 3);
+      if (usable && candidate) {
+        flush();
+        pending = candidate;
+        if (items.length + 1 >= MAX_ITEMS) {
+          flush();
+          warnings.push("Es wurden nur die ersten 4000 Positionen gelesen.");
+          break;
+        }
+        continue;
+      }
+      if (isRowNoise(row) || isRowNoise([article, candidate?.name ?? ""])) continue;
+      if (pending && !looksLikeArticle(article)) {
+        const fragment = fragmentText(row, mapping);
+        if (fragment && !isRowNoise([fragment]) && !isPersonLine(fragment)) continuation.push(fragment);
+      }
+    }
     if (items.length >= MAX_ITEMS) {
       warnings.push("Es wurden nur die ersten 4000 Positionen gelesen.");
       break;
     }
   }
+  flush();
 
   if (items.some((item) => item.priceBasis > 1)) {
-    warnings.push("Preisbasis 10, 100 oder 1000 erkannt. Einzelpreise sind auf eine Einheit umgerechnet.");
+    warnings.push(
+      "Preisbasis, Packungsgröße oder Meterlänge erkannt. Preise sind auf eine Einheit umgerechnet.",
+    );
   }
   return { items, mapping, headers, warnings };
 }

@@ -1,4 +1,8 @@
+import fs from "node:fs";
+import path from "node:path";
 import { importDocument, type IncomingPart } from "@/lib/db";
+import { buildParsed } from "@/lib/parse/build";
+import { readPdf } from "@/lib/parse/pdf";
 import type { DocType } from "@/lib/types";
 
 type SampleDoc = {
@@ -98,11 +102,68 @@ const documents: SampleDoc[] = [
   },
 ];
 
-export function installSampleLibrary(): { documents: number; parts: number } {
+const exampleInvoices: {
+  id: string;
+  filename: string;
+  supplier: string;
+  uploadedAt: string;
+}[] = [
+  {
+    id: "sample-pollin-rechnung",
+    filename: "Rechnung.pdf",
+    supplier: "Pollin Electronic",
+    uploadedAt: "2026-10-06T08:00:00.000Z",
+  },
+  {
+    id: "sample-wandelt-rechnung",
+    filename: "Rechnung42295692.pdf",
+    supplier: "Elektrohandel Wandelt",
+    uploadedAt: "2026-10-21T08:00:00.000Z",
+  },
+];
+
+async function importExampleInvoice(invoice: (typeof exampleInvoices)[number]): Promise<number> {
+  const filePath = path.join(process.cwd(), "examples", invoice.filename);
+  const bytes = new Uint8Array(fs.readFileSync(filePath));
+  const read = await readPdf(bytes);
+  const parsed = buildParsed({
+    filename: invoice.filename,
+    kind: "pdf",
+    sheets: read.sheets,
+    warnings: read.warnings,
+  });
+  const items = parsed.items
+    .filter((item) => item.unitPrice != null && (item.name || item.articleNumber))
+    .map((item) => ({
+      articleNumber: item.articleNumber,
+      name: item.name,
+      unit: item.unit,
+      unitPrice: item.unitPrice,
+      quantity: item.quantity,
+      totalPrice: item.totalPrice,
+      priceBasis: item.priceBasis,
+    }));
+  if (items.length === 0) {
+    throw new Error(`${invoice.filename} enthält keine lesbaren Positionen.`);
+  }
+  return importDocument({
+    id: invoice.id,
+    filename: invoice.filename,
+    supplier: invoice.supplier,
+    docType: "rechnung",
+    uploadedAt: invoice.uploadedAt,
+    items,
+  }).itemCount;
+}
+
+export async function installSampleLibrary(): Promise<{ documents: number; parts: number }> {
   let parts = 0;
   for (const document of documents) {
     const saved = importDocument(document);
     parts += saved.itemCount;
   }
-  return { documents: documents.length, parts };
+  for (const invoice of exampleInvoices) {
+    parts += await importExampleInvoice(invoice);
+  }
+  return { documents: documents.length + exampleInvoices.length, parts };
 }

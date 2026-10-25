@@ -47,6 +47,7 @@ export function ImportView() {
   const [dragging, setDragging] = useState(false);
   const [reading, setReading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [sampling, setSampling] = useState(false);
   const [remapping, setRemapping] = useState(false);
   const [error, setError] = useState("");
   const [parsed, setParsed] = useState<ParseResult | null>(null);
@@ -63,6 +64,20 @@ export function ImportView() {
 
   const selectedCount = drafts.filter((draft) => draft.selected && draft.unitPrice != null).length;
   const pricedCount = drafts.filter((draft) => draft.unitPrice != null).length;
+
+  async function loadExamples() {
+    setSampling(true);
+    try {
+      const result = await requestJson<{ parts: number }>("/api/sample", { method: "POST" });
+      notifyLibraryChanged();
+      toast.success(`${result.parts} Beispielpreise geladen`);
+      router.push("/");
+    } catch (reason) {
+      toast.error(reason instanceof Error ? reason.message : "Beispielrechnungen fehlgeschlagen");
+    } finally {
+      setSampling(false);
+    }
+  }
 
   async function parseFile(file: File) {
     setError("");
@@ -163,7 +178,8 @@ export function ImportView() {
       <h1 className="mt-2 text-3xl font-semibold tracking-tight">Rechnung oder Preiskatalog</h1>
       <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted-foreground">
         PDF, Excel (.xlsx) oder CSV. Die Datei bleibt auf diesem Rechner. Vor dem Speichern siehst
-        du jede Position und kannst Artikel, Einheit und Preis korrigieren.
+        du jede Position und kannst Artikel, Einheit und Preis korrigieren. Ohne eigene Datei laden
+        die Beispielrechnungen von Pollin und Elektrohandel Wandelt Stück- und Meterpreise.
       </p>
 
       {!parsed ? (
@@ -219,6 +235,18 @@ export function ImportView() {
               </>
             )}
           </label>
+          <div className="mt-4 flex justify-center">
+            <Button
+              type="button"
+              variant="outline"
+              className="h-10"
+              disabled={sampling || reading}
+              onClick={() => void loadExamples()}
+            >
+              {sampling ? <Loader2Icon className="animate-spin" /> : null}
+              Beispielrechnungen laden
+            </Button>
+          </div>
           {error ? (
             <div className="mt-4 flex gap-3 rounded-xl border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm">
               <TriangleAlertIcon className="mt-0.5 size-4 shrink-0" />

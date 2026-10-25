@@ -34,7 +34,9 @@ npm test
 
 Ältere `.xls`-Dateien vorher als `.xlsx` speichern. Gescannte PDFs ohne Text werden nicht gelesen.
 
-Erkannt werden Artikelnummer, Bezeichnung, Einheit (Stück, Meter, m², m³ und weitere), Einzelpreis und, wenn vorhanden, Menge und Gesamtpreis. Steht ein Preis je 100 oder je 1000, wird er auf eine Einheit umgerechnet und in der Prüfung gekennzeichnet. Liegen EK und VK nebeneinander, wird der Einkaufspreis genommen. Die Spaltenzuordnung lässt sich vor dem Speichern ändern.
+Erkannt werden Artikelnummer, Bezeichnung, Einheit (Stück, Meter, m², m³ und weitere), Einzelpreis und, wenn vorhanden, Menge und Gesamtpreis. Steht ein Preis je 100 oder je 1000, wird er auf eine Einheit umgerechnet und in der Prüfung gekennzeichnet. Packungszeilen wie „100 Stück“ und Meterware wie „1x100 Meter“ werden auf den Stück- bzw. Meterpreis umgerechnet. Folgetext bleibt an der Position. Liegen EK und VK nebeneinander, wird der Einkaufspreis genommen. Die Spaltenzuordnung lässt sich vor dem Speichern ändern.
+
+Unter `examples/` liegen zwei Rechnungen (Pollin, Elektrohandel Wandelt). „Beispielbestand laden“ auf der Suche und „Beispielrechnungen laden“ beim Import lesen sie mit demselben Parser und legen die Preise in die Bibliothek.
 
 ## Weitergeben
 
