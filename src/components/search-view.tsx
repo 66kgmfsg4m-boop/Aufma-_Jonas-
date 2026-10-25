@@ -113,9 +113,9 @@ export function SearchView() {
         Stück- und Meterpreise
       </h1>
       <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted-foreground md:text-base">
-        Dieselbe Artikelnummer erscheint als ein Bauteil. Darunter stehen die Preise der Quellen,
-        jeweils mit Einkauf und dem Verkaufspreis von 20 % darauf. In die Rechnung geht nur der
-        Verkaufspreis.
+        Die Bibliothek ist nach Gewerk gegliedert. Dieselbe Artikelnummer bleibt ein Bauteil, auch
+        wenn mehrere Quellen einen Preis nennen. Neben dem Einkauf steht der Verkaufspreis mit 20 %
+        Aufschlag. In die Rechnung geht nur dieser Preis.
       </p>
       <div className="relative mt-6">
         <SearchIcon className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
