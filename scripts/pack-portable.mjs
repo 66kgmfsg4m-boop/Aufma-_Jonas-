@@ -183,29 +183,19 @@ async function verifyNodeDownloads(files) {
   }
 }
 
-function extractArchive(archive, dest) {
+function extractMembers(archive, dest, members) {
   rmSync(dest, { recursive: true, force: true });
   mkdirSync(dest, { recursive: true });
-  if (archive.endsWith(".zip")) {
-    try {
-      execFileSync("tar", ["-xf", archive, "-C", dest], { stdio: "ignore" });
-      if (readdirSync(dest).length > 0) return;
-    } catch {
-      // GNU tar does not read zip archives. unzip does, and Windows tar does too.
-    }
-    try {
-      execFileSync("unzip", ["-q", archive, "-d", dest], { stdio: "inherit" });
-    } catch (error) {
-      const missing = error && typeof error === "object" && "code" in error && error.code === "ENOENT";
-      fail(
-        missing
-          ? "Die Windows-Node-Datei konnte nicht entpackt werden. Windows 10 oder neuer bringt tar mit."
-          : `Archiv konnte nicht entpackt werden: ${path.basename(archive)}`,
-      );
-    }
-    return;
+  try {
+    execFileSync("tar", ["-xf", archive, "-C", dest, ...members], { stdio: "inherit" });
+  } catch {
+    fail(`Archiv konnte nicht entpackt werden: ${path.basename(archive)}`);
   }
-  execFileSync("tar", ["-xf", archive, "-C", dest], { stdio: "inherit" });
+  for (const member of members) {
+    if (!existsSync(path.join(dest, ...member.split("/")))) {
+      fail(`In ${path.basename(archive)} fehlt ${member}.`);
+    }
+  }
 }
 
 function copyApp(target) {
@@ -439,9 +429,12 @@ async function main() {
   cpSync(path.join(winDir, "app"), path.join(macDir, "app"), { recursive: true, dereference: true });
 
   const extracted = path.join(cache, "extracted");
-  extractArchive(winArchive, path.join(extracted, "win"));
-  extractArchive(armArchive, path.join(extracted, "arm"));
-  extractArchive(intelArchive, path.join(extracted, "intel"));
+  const winPack = `node-${nodeVersion}-win-x64`;
+  const armPack = `node-${nodeVersion}-darwin-arm64`;
+  const intelPack = `node-${nodeVersion}-darwin-x64`;
+  extractMembers(winArchive, path.join(extracted, "win"), [`${winPack}/node.exe`, `${winPack}/LICENSE`]);
+  extractMembers(armArchive, path.join(extracted, "arm"), [`${armPack}/bin/node`, `${armPack}/LICENSE`]);
+  extractMembers(intelArchive, path.join(extracted, "intel"), [`${intelPack}/bin/node`, `${intelPack}/LICENSE`]);
 
   const winNode = path.join(extracted, "win", `node-${nodeVersion}-win-x64`, "node.exe");
   const armNode = path.join(extracted, "arm", `node-${nodeVersion}-darwin-arm64`, "bin", "node");
