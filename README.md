@@ -42,6 +42,26 @@ Die Suche gliedert die Bauteile nach Gewerk. Gleiche Artikelnummern werden als e
 
 ## Weitergeben
 
+Python, Git und Node muss die andere Person nicht installieren. Das gilt für Windows und für den Mac (Apple-Silicon und Intel).
+
+Auf dem Rechner, auf dem die App schon läuft, einmal bauen. `npm run dev` vorher beenden.
+
+```bash
+npm install
+npm run pack
+```
+
+In `dist/` liegen danach zwei ZIP-Dateien:
+
+- `Aufmass-Windows.zip`
+- `Aufmass-Mac.zip`
+
+Die ZIP vollständig entpacken, nicht nur öffnen. Dann die Startdatei doppelklicken: auf Windows `Aufmass starten.bat`, auf dem Mac `Aufmass starten.command`. Der Browser öffnet [http://127.0.0.1:47291](http://127.0.0.1:47291). Das Fenster der Startdatei bleibt offen, solange die App läuft.
+
+Auf dem Mac blockiert das System die Datei beim ersten Start, weil sie aus dem Internet kommt. Rechtsklick auf `Aufmass starten.command`, dann „Öffnen“. Steht danach noch eine Fehlermeldung, im entpackten Ordner im Terminal `xattr -dr com.apple.quarantine .` ausführen und die Startdatei erneut öffnen.
+
+Die Preise der anderen Person liegen in `app/data/aufmass.db` im entpackten Ordner. Bei einer neuen Version diesen Ordner in das neue Paket kopieren. Die ZIP enthält die Bibliothek nicht.
+
 Mit Docker, die Bibliothek bleibt im Volume:
 
 ```bash
