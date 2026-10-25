@@ -7,6 +7,23 @@ export function asText(value: unknown, max: number): string {
   return value.replace(/\s+/g, " ").trim().slice(0, max);
 }
 
+export function asNumber(value: unknown, fallback = 0): number {
+  const numeric = asPrice(value);
+  return numeric == null ? fallback : numeric;
+}
+
+export function asDate(value: unknown): string {
+  const text = asText(value, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(text) ? text : "";
+}
+
+export function asBool(value: unknown, fallback = false): boolean {
+  if (typeof value === "boolean") return value;
+  if (value === 1 || value === "1" || value === "true") return true;
+  if (value === 0 || value === "0" || value === "false") return false;
+  return fallback;
+}
+
 export function asPrice(value: unknown): number | null {
   const numeric =
     typeof value === "number"

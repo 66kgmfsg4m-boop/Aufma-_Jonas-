@@ -80,20 +80,43 @@ export function classifyPart(name: string, articleNumber = ""): CategoryId {
 }
 
 export type CategoryBucket = {
-  category: Category;
+  category: Gewerk;
   groups: PartGroup[];
 };
 
-export function bucketGroups(groups: PartGroup[]): CategoryBucket[] {
-  const map = new Map<CategoryId, PartGroup[]>();
+export type Gewerk = {
+  id: string;
+  label: string;
+  hint: string;
+  color: string;
+};
+
+export function groupCategoryId(group: PartGroup, categories: readonly Gewerk[]): string {
+  const known = new Set(categories.map((category) => category.id));
+  for (const offer of group.offers) {
+    if (offer.categoryId && known.has(offer.categoryId)) return offer.categoryId;
+  }
+  const auto = classifyPart(group.name, group.articleNumber);
+  if (known.has(auto)) return auto;
+  if (known.has("sonstiges")) return "sonstiges";
+  return categories[categories.length - 1]?.id ?? "sonstiges";
+}
+
+export function bucketGroups(
+  groups: PartGroup[],
+  categories: readonly Gewerk[] = CATEGORIES,
+  includeEmpty = false,
+): CategoryBucket[] {
+  const map = new Map<string, PartGroup[]>();
   for (const group of groups) {
-    const id = classifyPart(group.name, group.articleNumber);
+    const id = groupCategoryId(group, categories);
     const list = map.get(id);
     if (list) list.push(group);
     else map.set(id, [group]);
   }
-  return CATEGORIES.flatMap((category) => {
-    const grouped = map.get(category.id);
-    return grouped && grouped.length > 0 ? [{ category, groups: grouped }] : [];
+  return categories.flatMap((category) => {
+    const grouped = map.get(category.id) ?? [];
+    if (grouped.length === 0 && !includeEmpty) return [];
+    return [{ category, groups: grouped }];
   });
 }

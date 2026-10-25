@@ -1,12 +1,15 @@
 import fs from "node:fs";
 import path from "node:path";
 import { DatabaseSync, type SqlValue } from "node:sqlite";
+import { CATEGORIES } from "@/lib/classify";
 import { fold } from "@/lib/parse/text";
 import type { DocType, Part, PriceDocument } from "@/lib/types";
 
+const SCHEMA = 2;
+
 const globalDb = globalThis as typeof globalThis & {
   __aufmass?: DatabaseSync;
-  __aufmassOrders?: boolean;
+  __aufmassSchema?: number;
 };
 
 function database(): DatabaseSync {
@@ -47,9 +50,10 @@ function database(): DatabaseSync {
   `);
   globalDb.__aufmass = db;
   }
-  if (!globalDb.__aufmassOrders) {
-    ensureOrderTables(globalDb.__aufmass!);
-    globalDb.__aufmassOrders = true;
+  if (globalDb.__aufmassSchema !== SCHEMA) {
+    ensureOrderTables(globalDb.__aufmass);
+    ensureAppSchema(globalDb.__aufmass);
+    globalDb.__aufmassSchema = SCHEMA;
   }
   return globalDb.__aufmass;
 }
@@ -86,6 +90,90 @@ function ensureOrderTables(db: DatabaseSync) {
   `);
 }
 
+function tableColumns(db: DatabaseSync, table: string): Set<string> {
+  return new Set(
+    db.prepare(`PRAGMA table_info(${table})`).all().map((row) => text(row.name)),
+  );
+}
+
+function addColumn(db: DatabaseSync, table: string, name: string, definition: string) {
+  if (!tableColumns(db, table).has(name)) {
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${definition}`);
+  }
+}
+
+function ensureAppSchema(db: DatabaseSync) {
+  addColumn(db, "parts", "category_id", "category_id TEXT");
+  for (const [name, definition] of [
+    ["client_id", "client_id TEXT NOT NULL DEFAULT ''"],
+    ["street", "street TEXT NOT NULL DEFAULT ''"],
+    ["zip", "zip TEXT NOT NULL DEFAULT ''"],
+    ["city", "city TEXT NOT NULL DEFAULT ''"],
+    ["email", "email TEXT NOT NULL DEFAULT ''"],
+    ["phone", "phone TEXT NOT NULL DEFAULT ''"],
+    ["kilometers", "kilometers REAL NOT NULL DEFAULT 0"],
+    ["hours", "hours REAL NOT NULL DEFAULT 0"],
+    ["small_parts", "small_parts INTEGER NOT NULL DEFAULT 1"],
+    ["discount", "discount REAL NOT NULL DEFAULT 0"],
+    ["deduction", "deduction REAL NOT NULL DEFAULT 0"],
+    ["service_date", "service_date TEXT NOT NULL DEFAULT ''"],
+    ["invoice_date", "invoice_date TEXT NOT NULL DEFAULT ''"],
+  ] as const) {
+    addColumn(db, "orders", name, definition);
+  }
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS categories (
+      id TEXT PRIMARY KEY,
+      label TEXT NOT NULL,
+      color TEXT NOT NULL,
+      hint TEXT NOT NULL DEFAULT '',
+      position INTEGER NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS clients (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      street TEXT NOT NULL DEFAULT '',
+      zip TEXT NOT NULL DEFAULT '',
+      city TEXT NOT NULL DEFAULT '',
+      email TEXT NOT NULL DEFAULT '',
+      phone TEXT NOT NULL DEFAULT '',
+      notes TEXT NOT NULL DEFAULT '',
+      updated_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS events (
+      id TEXT PRIMARY KEY,
+      date TEXT NOT NULL,
+      title TEXT NOT NULL,
+      client_id TEXT NOT NULL DEFAULT '',
+      order_id TEXT NOT NULL DEFAULT '',
+      notes TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS invoices (
+      id TEXT PRIMARY KEY,
+      order_id TEXT NOT NULL DEFAULT '',
+      number TEXT NOT NULL,
+      issued_at TEXT NOT NULL,
+      snapshot TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_events_date ON events(date);
+    CREATE INDEX IF NOT EXISTS idx_clients_name ON clients(name);
+  `);
+  const count = db.prepare("SELECT COUNT(*) AS c FROM categories").get();
+  if ((num(count?.c) ?? 0) === 0) {
+    const insert = db.prepare(
+      "INSERT INTO categories (id, label, color, hint, position) VALUES (?, ?, ?, ?, ?)",
+    );
+    CATEGORIES.forEach((category, index) => {
+      insert.run(category.id, category.label, category.color, category.hint, index);
+    });
+  }
+}
+
 function text(value: SqlValue | undefined): string {
   if (typeof value === "string") return value;
   if (value == null) return "";
@@ -114,6 +202,7 @@ function mapPart(row: Record<string, SqlValue>): Part {
     docType: text(row.doc_type) === "rechnung" ? "rechnung" : "katalog",
     sourceFile: text(row.source_file),
     importedAt: text(row.imported_at),
+    categoryId: text(row.category_id) || null,
   };
 }
 
@@ -369,4 +458,62 @@ export function libraryStats(): {
     latestImport: counts?.latest == null ? null : text(counts.latest),
     suppliers: suppliers.map((row) => ({ name: text(row.name), count: num(row.count) ?? 0 })),
   };
+}
+
+export const MANUAL_DOCUMENT_ID = "manual-library";
+
+export function createManualPart(input: {
+  articleNumber: string;
+  name: string;
+  unit: string;
+  unitPrice: number;
+  supplier: string;
+  categoryId: string | null;
+}): Part {
+  const db = database();
+  const now = new Date().toISOString();
+  const supplier = input.supplier.trim() || "Manuell";
+  const existing = db.prepare("SELECT id FROM documents WHERE id = ?").get(MANUAL_DOCUMENT_ID);
+  if (!existing) {
+    db.prepare(
+      `INSERT INTO documents (id, filename, doc_type, supplier, uploaded_at, item_count)
+       VALUES (?, 'Manuelle Eingabe', 'katalog', 'Manuell', ?, 0)`,
+    ).run(MANUAL_DOCUMENT_ID, now);
+  }
+  const id = crypto.randomUUID();
+  const articleNumber = input.articleNumber.trim();
+  const name = input.name.trim();
+  db.prepare(
+    `INSERT INTO parts (
+      id, document_id, article_number, name, unit, unit_price, quantity, total_price,
+      price_basis, currency, supplier, doc_type, source_file, imported_at, search_text, category_id
+    ) VALUES (?, ?, ?, ?, ?, ?, NULL, NULL, 1, 'EUR', ?, 'katalog', 'Manuelle Eingabe', ?, ?, ?)`,
+  ).run(
+    id,
+    MANUAL_DOCUMENT_ID,
+    articleNumber,
+    name,
+    input.unit.trim(),
+    input.unitPrice,
+    supplier,
+    now,
+    fold([articleNumber, name, supplier, input.unit, "Manuelle Eingabe"].join(" ")),
+    input.categoryId,
+  );
+  db.prepare(
+    `UPDATE documents
+     SET item_count = (SELECT COUNT(*) FROM parts WHERE document_id = ?), uploaded_at = ?
+     WHERE id = ?`,
+  ).run(MANUAL_DOCUMENT_ID, now, MANUAL_DOCUMENT_ID);
+  return getPart(id)!;
+}
+
+export function assignCategories(ids: string[], categoryId: string): number {
+  const db = database();
+  const update = db.prepare("UPDATE parts SET category_id = ? WHERE id = ?");
+  let changed = 0;
+  for (const id of ids) {
+    changed += update.run(categoryId, id).changes;
+  }
+  return changed;
 }

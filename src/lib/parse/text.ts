@@ -62,18 +62,30 @@ export function parseGermanNumber(value: unknown): number | null {
   return Number.isFinite(numeric) ? numeric : null;
 }
 
+const MONEY = /-?\d{1,3}(?:\.\d{3})*,\d{2}|-?\d+\.\d{2}/g;
+
 export function parsePriceCell(raw: string, allowInteger = false): number | null {
   const stripped = raw
     .trim()
     .replace(/€/g, "")
     .replace(/eur/gi, "")
     .trim();
-  if (!stripped || stripped.includes("%")) return null;
-  if (/[a-zäöü]/i.test(stripped)) return null;
-  if (!allowInteger && !/[,.]/.test(stripped)) return null;
-  const value = parseGermanNumber(stripped);
-  if (value == null || Math.abs(value) > 10_000_000) return null;
-  return value;
+  if (!stripped) return null;
+  const plain = !stripped.includes("%") && !/[a-zäöü]/i.test(stripped);
+  if (plain) {
+    if (!allowInteger && !/[,.]/.test(stripped)) return null;
+    const value = parseGermanNumber(stripped);
+    if (value == null || Math.abs(value) > 10_000_000) return null;
+    return value;
+  }
+  for (const match of stripped.matchAll(MONEY)) {
+    const after = stripped.slice((match.index ?? 0) + match[0].length).trimStart();
+    if (after.startsWith("%")) continue;
+    const value = parseGermanNumber(match[0]);
+    if (value == null || Math.abs(value) > 10_000_000) return null;
+    return value;
+  }
+  return null;
 }
 
 const UNIT_MAP: Record<string, string> = {

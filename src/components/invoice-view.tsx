@@ -1,16 +1,23 @@
 "use client";
 
 import { requestJson } from "@/components/api";
+import { InvoiceSheet } from "@/components/invoice-sheet";
 import { Button } from "@/components/ui/button";
-import { formatDay, formatEuro, formatNumber } from "@/lib/format";
-import type { JobOrder } from "@/lib/types";
+import { berlinToday } from "@/lib/format";
+import { buildInvoiceModel } from "@/lib/quote";
+import type { AppSettings, JobOrder } from "@/lib/types";
 import { PrinterIcon } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 
 export function InvoiceView({ id }: { id: string }) {
+  const router = useRouter();
   const [order, setOrder] = useState<JobOrder | null>(null);
+  const [settings, setSettings] = useState<AppSettings | null>(null);
   const [missing, setMissing] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -21,10 +28,33 @@ export function InvoiceView({ id }: { id: string }) {
       .catch(() => {
         if (!cancelled) setMissing(true);
       });
+    void requestJson<{ settings: AppSettings }>("/api/settings")
+      .then((data) => {
+        if (!cancelled) setSettings(data.settings);
+      })
+      .catch(() => {
+        if (!cancelled) setSettings(null);
+      });
     return () => {
       cancelled = true;
     };
   }, [id]);
+
+  async function archive() {
+    setSaving(true);
+    try {
+      const data = await requestJson<{ id: string }>(`/api/invoices`, {
+        method: "POST",
+        body: JSON.stringify({ orderId: id }),
+      });
+      toast.success("In der Historie gespeichert");
+      router.push(`/rechnungen/${data.id}`);
+    } catch (reason) {
+      toast.error(reason instanceof Error ? reason.message : "Speichern fehlgeschlagen");
+    } finally {
+      setSaving(false);
+    }
+  }
 
   if (missing) {
     return (
@@ -34,7 +64,7 @@ export function InvoiceView({ id }: { id: string }) {
     );
   }
 
-  if (!order) {
+  if (!order || !settings) {
     return (
       <div className="px-4 py-8">
         <div className="mx-auto h-96 max-w-3xl animate-pulse rounded-xl bg-muted/70" />
@@ -42,64 +72,31 @@ export function InvoiceView({ id }: { id: string }) {
     );
   }
 
+  const model = buildInvoiceModel(
+    order,
+    settings,
+    order.number,
+    new Date().toISOString(),
+    order.invoiceDate || berlinToday(),
+  );
+
   return (
     <div className="px-4 py-6 md:px-8 md:py-8">
       <div className="no-print mb-4 flex flex-wrap items-center justify-between gap-3">
         <Button asChild variant="outline">
           <Link href={`/auftraege/${order.id}`}>Zurück zum Auftrag</Link>
         </Button>
-        <Button onClick={() => window.print()} disabled={order.lines.length === 0}>
-          <PrinterIcon />
-          Drucken oder als PDF speichern
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" onClick={() => void archive()} disabled={saving}>
+            In die Historie
+          </Button>
+          <Button onClick={() => window.print()}>
+            <PrinterIcon />
+            Drucken oder als PDF speichern
+          </Button>
+        </div>
       </div>
-      <article className="invoice-sheet mx-auto max-w-3xl rounded-xl bg-[#f4efe4] px-6 py-8 text-[#231e18] shadow-xl md:px-10 md:py-10">
-        <header className="flex flex-col gap-4 border-b border-[#231e18]/15 pb-6 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <p className="font-mono text-[11px] tracking-[0.2em] text-[#8a5a12] uppercase">Rechnung</p>
-            <h1 className="mt-2 text-3xl font-semibold tracking-tight">{order.number}</h1>
-            <p className="mt-2 text-sm">{order.title}</p>
-            {order.customer ? <p className="text-sm">{order.customer}</p> : null}
-          </div>
-          <p className="text-sm">{formatDay()}</p>
-        </header>
-        {order.lines.length === 0 ? (
-          <p className="py-10 text-sm">Dieser Auftrag hat noch keine Positionen.</p>
-        ) : (
-          <table className="mt-6 w-full text-sm">
-            <thead>
-              <tr className="border-b border-[#231e18]/20 text-left text-[11px] tracking-[0.12em] uppercase">
-                <th className="py-2 pr-2 font-medium">Pos</th>
-                <th className="py-2 pr-2 font-medium">Bauteil</th>
-                <th className="py-2 pr-2 font-medium">Menge</th>
-                <th className="py-2 pr-2 text-right font-medium">Einzelpreis</th>
-                <th className="py-2 text-right font-medium">Gesamt</th>
-              </tr>
-            </thead>
-            <tbody>
-              {order.lines.map((line, index) => (
-                <tr key={line.id} className="border-b border-[#231e18]/10 align-top">
-                  <td className="py-3 pr-2 font-mono text-xs">{index + 1}</td>
-                  <td className="py-3 pr-2">
-                    <span className="block">{line.name}</span>
-                    <span className="text-xs text-[#231e18]/70">
-                      {line.articleNumber || "ohne Nummer"}
-                      {line.unit ? ` · ${line.unit}` : ""}
-                    </span>
-                  </td>
-                  <td className="py-3 pr-2 tabular-nums">{formatNumber(line.quantity)}</td>
-                  <td className="py-3 pr-2 text-right tabular-nums">{formatEuro(line.unitSell)}</td>
-                  <td className="py-3 text-right font-medium tabular-nums">{formatEuro(line.lineTotal)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-        <p className="mt-6 flex items-baseline justify-between gap-4 border-t border-[#231e18]/20 pt-4">
-          <span className="text-sm tracking-[0.14em] uppercase">Summe</span>
-          <span className="font-mono text-2xl tabular-nums">{formatEuro(order.sellTotal)}</span>
-        </p>
-      </article>
+      <InvoiceSheet model={model} />
     </div>
   );
 }

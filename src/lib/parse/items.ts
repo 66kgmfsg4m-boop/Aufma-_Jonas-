@@ -430,6 +430,8 @@ export function extractSheet(
       const folded = fold(pending.name);
       if (!folded.includes(fold(extra))) pending.name = clean(`${pending.name} ${extra}`);
     }
+    const asin = `${pending.name} ${extra}`.match(/\bASIN:\s*([A-Z0-9]{10})\b/i);
+    if (asin && !pending.articleNumber) pending.articleNumber = asin[1]!.toUpperCase();
     applySalesUnit(pending, extra);
     if (pending.unitPrice != null && pending.unitPrice > 0 && !isServiceText(`${pending.articleNumber} ${pending.name}`)) {
       items.push(pending);

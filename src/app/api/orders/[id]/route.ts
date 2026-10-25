@@ -1,5 +1,5 @@
 import { deleteOrder, getOrder, updateOrder } from "@/lib/orders";
-import { asText } from "@/lib/sanitize";
+import { asBool, asDate, asNumber, asText } from "@/lib/sanitize";
 
 export async function GET(
   _request: Request,
@@ -21,6 +21,18 @@ export async function PATCH(
   const updated = updateOrder(id, {
     title: asText(body.title, 160),
     customer: asText(body.customer, 160),
+    street: asText(body.street, 160),
+    zip: asText(body.zip, 12),
+    city: asText(body.city, 80),
+    email: asText(body.email, 160),
+    phone: asText(body.phone, 40),
+    kilometers: asNumber(body.kilometers),
+    hours: asNumber(body.hours),
+    smallParts: asBool(body.smallParts, true),
+    discount: asNumber(body.discount),
+    deduction: asNumber(body.deduction),
+    serviceDate: asDate(body.serviceDate),
+    invoiceDate: asDate(body.invoiceDate),
   });
   if (!updated) return Response.json({ error: "Der Auftrag braucht einen Namen." }, { status: 400 });
   return Response.json({ order: updated });

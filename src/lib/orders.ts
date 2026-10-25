@@ -1,6 +1,9 @@
+import { upsertClient } from "@/lib/clients";
 import { getPart, openDatabase } from "@/lib/db";
 import { lineTotal, sellPrice } from "@/lib/pricing";
-import type { JobOrder, OrderLine, OrderSummary } from "@/lib/types";
+import { buildQuote } from "@/lib/quote";
+import { getSettings } from "@/lib/settings";
+import type { AppSettings, JobOrder, OrderLine, OrderSummary } from "@/lib/types";
 import type { SqlValue } from "node:sqlite";
 
 function text(value: SqlValue | undefined): string {
@@ -19,10 +22,10 @@ function berlinYear(iso: string): string {
   return new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/Berlin", year: "numeric" }).format(new Date(iso));
 }
 
-function mapLine(row: Record<string, SqlValue>): OrderLine {
+function mapLine(row: Record<string, SqlValue>, markupPercent: number): OrderLine {
   const unitCost = num(row.unit_cost) ?? 0;
   const quantity = num(row.quantity) ?? 0;
-  const unitSell = sellPrice(unitCost);
+  const unitSell = sellPrice(unitCost, markupPercent);
   return {
     id: text(row.id),
     orderId: text(row.order_id),
@@ -40,36 +43,77 @@ function mapLine(row: Record<string, SqlValue>): OrderLine {
   };
 }
 
-function linesFor(orderId: string): OrderLine[] {
+function linesFor(orderId: string, markupPercent: number): OrderLine[] {
   return openDatabase()
     .prepare("SELECT * FROM order_lines WHERE order_id = ? ORDER BY position ASC, rowid ASC")
     .all(orderId)
-    .map(mapLine);
+    .map((row) => mapLine(row, markupPercent));
 }
 
 function sellTotal(lines: OrderLine[]): number {
   return Math.round(lines.reduce((sum, line) => sum + line.lineTotal, 0) * 100) / 100;
 }
 
-function mapOrder(row: Record<string, SqlValue>, lines: OrderLine[]): JobOrder {
+function bounded(value: number, max = 10_000_000): number {
+  if (!Number.isFinite(value) || value < 0) return 0;
+  return Math.min(max, Math.round(value * 100) / 100);
+}
+
+function quoteFor(row: Record<string, SqlValue>, lines: OrderLine[], settings: AppSettings) {
+  return buildQuote({
+    material: sellTotal(lines),
+    smallPartsOn: (num(row.small_parts) ?? 1) !== 0,
+    kilometers: num(row.kilometers) ?? 0,
+    hours: num(row.hours) ?? 0,
+    discount: num(row.discount) ?? 0,
+    deduction: num(row.deduction) ?? 0,
+    markupPercent: settings.markupPercent,
+    smallPartsPercent: settings.smallPartsPercent,
+    travelEuroPerKm: settings.travelEuroPerKm,
+    hourlyRate: settings.hourlyRate,
+    vatPercent: settings.vatPercent,
+    skontoPercent: settings.skontoPercent,
+    skontoDays: settings.skontoDays,
+    paymentDays: settings.paymentDays,
+  });
+}
+
+function mapOrder(row: Record<string, SqlValue>, lines: OrderLine[], settings: AppSettings): JobOrder {
+  const quote = quoteFor(row, lines, settings);
   return {
     id: text(row.id),
     seq: num(row.seq) ?? 0,
     number: text(row.number),
     title: text(row.title),
     customer: text(row.customer),
+    clientId: text(row.client_id),
+    street: text(row.street),
+    zip: text(row.zip),
+    city: text(row.city),
+    email: text(row.email),
+    phone: text(row.phone),
+    kilometers: num(row.kilometers) ?? 0,
+    hours: num(row.hours) ?? 0,
+    smallParts: (num(row.small_parts) ?? 1) !== 0,
+    discount: num(row.discount) ?? 0,
+    deduction: num(row.deduction) ?? 0,
+    serviceDate: text(row.service_date),
+    invoiceDate: text(row.invoice_date),
     createdAt: text(row.created_at),
     updatedAt: text(row.updated_at),
     lines,
-    sellTotal: sellTotal(lines),
+    sellTotal: quote.material,
+    quote,
   };
 }
 
 export function listOrders(): OrderSummary[] {
   const db = openDatabase();
+  const settings = getSettings();
   const rows = db.prepare("SELECT * FROM orders ORDER BY updated_at DESC").all();
   return rows.map((row) => {
-    const lines = linesFor(text(row.id));
+    const lines = linesFor(text(row.id), settings.markupPercent);
+    const quote = quoteFor(row, lines, settings);
     return {
       id: text(row.id),
       seq: num(row.seq) ?? 0,
@@ -79,15 +123,17 @@ export function listOrders(): OrderSummary[] {
       createdAt: text(row.created_at),
       updatedAt: text(row.updated_at),
       lineCount: lines.length,
-      sellTotal: sellTotal(lines),
+      sellTotal: quote.material,
+      payable: quote.payable,
     };
   });
 }
 
 export function getOrder(id: string): JobOrder | null {
+  const settings = getSettings();
   const row = openDatabase().prepare("SELECT * FROM orders WHERE id = ?").get(id);
   if (!row) return null;
-  return mapOrder(row, linesFor(id));
+  return mapOrder(row, linesFor(id, settings.markupPercent), settings);
 }
 
 export function createOrder(input: { title: string; customer: string }): JobOrder {
@@ -98,21 +144,79 @@ export function createOrder(input: { title: string; customer: string }): JobOrde
   const seq = (num(seqRow?.seq) ?? 0) + 1;
   const number = `RE-${berlinYear(now)}-${String(seq).padStart(3, "0")}`;
   const title = input.title.trim() || "Auftrag";
+  const customer = input.customer.trim();
+  const client = customer
+    ? upsertClient({ name: customer, street: "", zip: "", city: "", email: "", phone: "" })
+    : null;
   db.prepare(
-    `INSERT INTO orders (id, seq, number, title, customer, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
-  ).run(id, seq, number, title, input.customer.trim(), now, now);
+    `INSERT INTO orders (id, seq, number, title, customer, client_id, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(id, seq, number, title, customer, client?.id ?? "", now, now);
   return getOrder(id)!;
 }
 
-export function updateOrder(id: string, input: { title: string; customer: string }): JobOrder | null {
+export type OrderHead = {
+  title: string;
+  customer: string;
+  street: string;
+  zip: string;
+  city: string;
+  email: string;
+  phone: string;
+  kilometers: number;
+  hours: number;
+  smallParts: boolean;
+  discount: number;
+  deduction: number;
+  serviceDate: string;
+  invoiceDate: string;
+};
+
+function dateOrEmpty(value: string): string {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : "";
+}
+
+export function updateOrder(id: string, input: OrderHead): JobOrder | null {
   const current = getOrder(id);
   if (!current) return null;
   const title = input.title.trim();
   if (!title) return null;
+  const customer = input.customer.trim();
+  const street = input.street.trim();
+  const zip = input.zip.trim();
+  const city = input.city.trim();
+  const email = input.email.trim();
+  const phone = input.phone.trim();
+  const client = customer
+    ? upsertClient({ name: customer, street, zip, city, email, phone })
+    : null;
   openDatabase()
-    .prepare("UPDATE orders SET title = ?, customer = ?, updated_at = ? WHERE id = ?")
-    .run(title, input.customer.trim(), new Date().toISOString(), id);
+    .prepare(
+      `UPDATE orders SET
+        title = ?, customer = ?, client_id = ?, street = ?, zip = ?, city = ?, email = ?, phone = ?,
+        kilometers = ?, hours = ?, small_parts = ?, discount = ?, deduction = ?,
+        service_date = ?, invoice_date = ?, updated_at = ?
+       WHERE id = ?`,
+    )
+    .run(
+      title,
+      customer,
+      client?.id ?? "",
+      street,
+      zip,
+      city,
+      email,
+      phone,
+      bounded(input.kilometers),
+      bounded(input.hours),
+      input.smallParts ? 1 : 0,
+      bounded(input.discount),
+      bounded(input.deduction),
+      dateOrEmpty(input.serviceDate),
+      dateOrEmpty(input.invoiceDate),
+      new Date().toISOString(),
+      id,
+    );
   return getOrder(id);
 }
 

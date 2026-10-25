@@ -71,7 +71,7 @@ export function QuellenView() {
       <h1 className="mt-2 text-3xl font-semibold tracking-tight">Rechnungen und Kataloge</h1>
       <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted-foreground">
         Jeder Import bleibt als Quelle erhalten. Neben dem Einkaufspreis einer Position steht der
-        Verkaufspreis mit 20 % Aufschlag. Löschst du eine Quelle, verschwinden auch ihre Preise.
+        Verkaufspreis mit dem Aufschlag aus den Einstellungen. Löschst du eine Quelle, verschwinden auch ihre Preise.
       </p>
       <div className="mt-6">
         {error ? (

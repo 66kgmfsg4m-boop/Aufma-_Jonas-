@@ -39,6 +39,31 @@ export function formatDay(iso?: string): string {
   return berlinDay.format(date);
 }
 
+export function berlinToday(): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Berlin",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+}
+
+export function formatIsoDate(iso: string): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
+  if (!match) return formatDay(iso);
+  const date = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]), 12));
+  return berlinDay.format(date);
+}
+
+export function addDays(isoDate: string, days: number): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(isoDate);
+  const base = match
+    ? new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])))
+    : new Date();
+  base.setUTCDate(base.getUTCDate() + days);
+  return base.toISOString().slice(0, 10);
+}
+
 export function formatWhen(iso: string): string {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return "";

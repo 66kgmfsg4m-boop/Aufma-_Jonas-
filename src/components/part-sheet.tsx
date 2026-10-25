@@ -15,7 +15,7 @@ import {
 import { docTypeLabel, formatEuro, formatNumber, formatUnit, formatWhen } from "@/lib/format";
 import { parseGermanNumber } from "@/lib/parse/text";
 import { sellPrice } from "@/lib/pricing";
-import type { Part } from "@/lib/types";
+import type { AppSettings, Part } from "@/lib/types";
 import { Loader2Icon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -67,6 +67,13 @@ function PartForm({
   const [loadingRelated, setLoadingRelated] = useState(true);
   const [saving, setSaving] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [markup, setMarkup] = useState(20);
+
+  useEffect(() => {
+    void requestJson<{ settings: AppSettings }>("/api/settings")
+      .then((data) => setMarkup(data.settings.markupPercent))
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -142,9 +149,9 @@ function PartForm({
             <p className="mt-1 text-xs text-muted-foreground">{formatUnit(unit)}</p>
           </div>
           <div className="rounded-xl border border-primary/30 bg-primary/10 p-4">
-            <p className="font-mono text-[10px] tracking-[0.14em] text-primary uppercase">VK +20 %</p>
+            <p className="font-mono text-[10px] tracking-[0.14em] text-primary uppercase">VK +{markup} %</p>
             <p className="price mt-1 text-xl">
-              {formatEuro(sellOf(parseGermanNumber(priceText) ?? part.unitPrice))}
+              {formatEuro(priced(parseGermanNumber(priceText) ?? part.unitPrice, markup))}
             </p>
             <p className="mt-1 text-xs text-muted-foreground">Basis der Rechnung</p>
           </div>
@@ -154,7 +161,10 @@ function PartForm({
             Ursprünglich je {part.priceBasis} {unit || "Einheiten"} geführt
           </p>
         ) : null}
-        <TakePartButton part={{ ...part, unitPrice: parseGermanNumber(priceText) ?? part.unitPrice, name, unit, articleNumber }} />
+        <TakePartButton
+          part={{ ...part, unitPrice: parseGermanNumber(priceText) ?? part.unitPrice, name, unit, articleNumber }}
+          markupPercent={markup}
+        />
         <div className="grid gap-3">
           <Field label="Artikelnummer" value={articleNumber} onChange={setArticleNumber} />
           <Field label="Bezeichnung" value={name} onChange={setName} />
@@ -206,7 +216,7 @@ function PartForm({
                     </span>
                     <span className="text-right">
                       <span className="block text-[11px] text-muted-foreground">EK {formatEuro(other.unitPrice)}</span>
-                      <span className="price text-base">{formatEuro(sellOf(other.unitPrice))}</span>
+                      <span className="price text-base">{formatEuro(priced(other.unitPrice, markup))}</span>
                     </span>
                   </button>
                 </li>
@@ -219,9 +229,9 @@ function PartForm({
   );
 }
 
-function sellOf(value: number | null): number | null {
+function priced(value: number | null, markup: number): number | null {
   if (value == null) return null;
-  return sellPrice(value);
+  return sellPrice(value, markup);
 }
 
 function Field({

@@ -14,7 +14,8 @@ import {
 } from "@/components/ui/select";
 import { groupParts } from "@/lib/groups";
 import type { LibraryStats, Part, SearchResponse } from "@/lib/types";
-import { Loader2Icon, SearchIcon, UploadIcon } from "lucide-react";
+import { ManualPartDialog } from "@/components/manual-part-dialog";
+import { Loader2Icon, PlusIcon, SearchIcon, UploadIcon } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -41,6 +42,7 @@ export function SearchView() {
   const [active, setActive] = useState<Part | null>(null);
   const [sampling, setSampling] = useState(false);
   const [revision, setRevision] = useState(0);
+  const [manual, setManual] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -112,11 +114,17 @@ export function SearchView() {
       <h1 className="mt-2 text-3xl font-semibold tracking-tight text-balance md:text-4xl">
         Stück- und Meterpreise
       </h1>
-      <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted-foreground md:text-base">
-        Die Bibliothek ist nach Gewerk gegliedert. Dieselbe Artikelnummer bleibt ein Bauteil, auch
-        wenn mehrere Quellen einen Preis nennen. Neben dem Einkauf steht der Verkaufspreis mit 20 %
-        Aufschlag. In die Rechnung geht nur dieser Preis.
-      </p>
+      <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground md:text-base">
+          Die Bibliothek ist nach Gewerk gegliedert. Dieselbe Artikelnummer bleibt ein Bauteil, auch
+          wenn mehrere Quellen einen Preis nennen. Der Verkaufspreis rechnet den Aufschlag aus den
+          Einstellungen auf den Einkauf. In die Rechnung geht nur dieser Preis.
+        </p>
+        <Button className="h-10 shrink-0" onClick={() => setManual(true)}>
+          <PlusIcon />
+          Position anlegen
+        </Button>
+      </div>
       <div className="relative mt-6">
         <SearchIcon className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
         <Input
@@ -184,6 +192,7 @@ export function SearchView() {
           </>
         )}
       </div>
+      <ManualPartDialog open={manual} onOpenChange={setManual} />
       <PartSheet
         part={active}
         onOpenChange={(open) => {

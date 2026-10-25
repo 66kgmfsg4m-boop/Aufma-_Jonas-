@@ -246,6 +246,16 @@ describe("pdf", () => {
     assert.equal(nym?.unitPrice, 0.9208);
     assert.equal(wandelt.items.some((item) => /lerchenweg|gutschein|oxgutschein|askay/i.test(`${item.name} ${item.articleNumber}`)), false);
   });
+
+  it("reads an Amazon invoice whose net price shares a cell with the tax rate", async () => {
+    const amazon = await readExample("examples/amazon-rechnung.pdf", "amazon-rechnung.pdf");
+    const socket = amazon.items.find((item) => item.articleNumber === "B09FM2F6J9");
+    assert.ok(socket);
+    assert.match(socket.name, /Neozed/);
+    assert.equal(socket.unitPrice, 23.49);
+    assert.equal(socket.quantity, 1);
+    assert.equal(amazon.items.some((item) => /versand/i.test(item.name)), false);
+  });
 });
 
 async function readExample(file: string, filename: string) {

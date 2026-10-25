@@ -32,11 +32,13 @@ export function TakePartButton({
   orderId,
   onAdded,
   label = "In den Auftrag",
+  markupPercent = 20,
 }: {
   part: Part;
   orderId?: string;
   onAdded?: () => void;
   label?: string;
+  markupPercent?: number;
 }) {
   const [open, setOpen] = useState(false);
   const [orders, setOrders] = useState<OrderSummary[] | null>(null);
@@ -45,7 +47,7 @@ export function TakePartButton({
   const [customer, setCustomer] = useState("");
   const [quantityText, setQuantityText] = useState("1");
   const [saving, setSaving] = useState(false);
-  const sell = part.unitPrice == null ? null : sellPrice(part.unitPrice);
+  const sell = part.unitPrice == null ? null : sellPrice(part.unitPrice, markupPercent);
 
   async function addDirect() {
     if (!orderId) return;
@@ -129,7 +131,7 @@ export function TakePartButton({
             <DialogTitle>In den Auftrag</DialogTitle>
             <DialogDescription>
               {part.name || part.articleNumber}. Die Rechnung verwendet den Verkaufspreis{" "}
-              {formatEuro(sell)}, das sind 20 % auf den Einkauf von {formatEuro(part.unitPrice)}.
+              {formatEuro(sell)}, das sind {markupPercent} % auf den Einkauf von {formatEuro(part.unitPrice)}.
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-3">

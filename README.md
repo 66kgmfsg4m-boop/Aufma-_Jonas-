@@ -38,7 +38,11 @@ Erkannt werden Artikelnummer, Bezeichnung, Einheit (Stück, Meter, m², m³ und 
 
 Unter `examples/` liegen zwei Rechnungen (Pollin, Elektrohandel Wandelt). „Beispielbestand laden“ auf der Suche und „Beispielrechnungen laden“ beim Import lesen sie mit demselben Parser und legen die Preise in die Bibliothek.
 
-Die Suche gliedert die Bauteile nach Gewerk. Gleiche Artikelnummern werden als ein Bauteil gezeigt. Neben jedem Einkaufspreis steht der Verkaufspreis mit 20 % Aufschlag. Unter Aufträge wählst du Positionen und Mengen. Die gedruckte Rechnung verwendet nur diese Verkaufspreise.
+Die Suche gliedert die Bauteile nach Gewerk. Gewerke lassen sich anlegen, umbenennen und per Ziehen oder Auswahl zuordnen. Gleiche Artikelnummern werden als ein Bauteil gezeigt. Neben jedem Einkaufspreis steht der Verkaufspreis mit dem Aufschlag aus den Einstellungen (Standard 20 %). Positionen ohne Datei legst du über „Position anlegen“ an.
+
+Unter Aufträge stehen Kunde, Adresse, Kilometer, Stunden, Kleinteilepauschale, Nachlass und Abschlag. Bekannte Kunden werden vorgeschlagen; die Liste liegt unter Kunden und im Kalender. Die Rechnung folgt dem Briefkopf und den Sätzen aus den Einstellungen. „In die Historie“ speichert die Rechnung so, wie sie in dem Moment war. Eine PDF-Vorlage lädst du unter Einstellungen hoch; sie ist die Ansicht der Vorlage, die ausgestellten Rechnungen setzen sich aus den Briefkopffeldern zusammen.
+
+Unter `examples/` liegt außerdem `amazon-rechnung.pdf`. Dort steht der Nettopreis in derselben Zelle wie der Steuersatz. Der Parser nimmt den Euro-Betrag und die ASIN als Artikelnummer.
 
 ## Weitergeben
 

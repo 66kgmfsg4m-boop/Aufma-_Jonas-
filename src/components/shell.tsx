@@ -4,7 +4,17 @@ import { requestJson, LIBRARY_CHANGED } from "@/components/api";
 import { formatWhen } from "@/lib/format";
 import type { LibraryStats } from "@/lib/types";
 import { cn } from "cn";
-import { ClipboardListIcon, FolderOpenIcon, RulerIcon, SearchIcon, UploadIcon } from "lucide-react";
+import {
+  CalendarIcon,
+  ClipboardListIcon,
+  FolderOpenIcon,
+  ReceiptIcon,
+  RulerIcon,
+  SearchIcon,
+  SettingsIcon,
+  UploadIcon,
+  UsersIcon,
+} from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
@@ -14,6 +24,10 @@ const links = [
   { href: "/import", label: "Import", icon: UploadIcon },
   { href: "/quellen", label: "Quellen", icon: FolderOpenIcon },
   { href: "/auftraege", label: "Aufträge", icon: ClipboardListIcon },
+  { href: "/kalender", label: "Kalender", icon: CalendarIcon },
+  { href: "/kunden", label: "Kunden", icon: UsersIcon },
+  { href: "/rechnungen", label: "Rechnungen", icon: ReceiptIcon },
+  { href: "/einstellungen", label: "Einstellungen", icon: SettingsIcon },
 ];
 
 export function Shell({ children }: { children: ReactNode }) {
@@ -45,7 +59,7 @@ export function Shell({ children }: { children: ReactNode }) {
       <div className="relative mx-auto flex min-h-screen max-w-[1440px] flex-col lg:flex-row">
         <header className="sticky top-0 z-30 flex items-center justify-between gap-3 border-b border-border bg-background/85 px-4 py-3 backdrop-blur-md lg:hidden">
           <Wordmark />
-          <nav className="flex gap-1" aria-label="Bereiche">
+          <nav className="flex max-w-[70vw] gap-1 overflow-x-auto" aria-label="Bereiche">
             {links.map((link) => {
               const active = link.href === "/" ? pathname === "/" : pathname.startsWith(link.href);
               const Icon = link.icon;

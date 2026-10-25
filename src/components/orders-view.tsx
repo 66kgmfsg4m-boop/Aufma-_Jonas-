@@ -77,6 +77,7 @@ export function OrdersView() {
           updatedAt: data.order.updatedAt,
           lineCount: 0,
           sellTotal: 0,
+          payable: data.order.quote.payable,
         },
         ...(current ?? []),
       ]);
@@ -96,7 +97,7 @@ export function OrdersView() {
           <h1 className="mt-2 text-3xl font-semibold tracking-tight">Rechnung aus Bauteilen</h1>
           <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted-foreground">
             Wähle Positionen aus der Bibliothek, trag die Menge ein. Die Rechnung rechnet mit dem
-            Verkaufspreis, also dem Einkauf plus 20 %.
+            Verkaufspreis. Kleinteile, Anfahrt, Stunden und Mehrwertsteuer kommen aus den Einstellungen.
           </p>
         </div>
         <Button className="h-10" onClick={() => setOpen(true)}>
@@ -142,7 +143,10 @@ export function OrdersView() {
                       Positionen
                     </span>
                   </span>
-                  <span className="price text-lg">{formatEuro(order.sellTotal)}</span>
+                  <span className="text-right">
+                    <span className="price block text-lg">{formatEuro(order.payable)}</span>
+                    <span className="text-[11px] text-muted-foreground">zu zahlen</span>
+                  </span>
                 </Link>
               </li>
             ))}
