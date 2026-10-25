@@ -44,7 +44,7 @@ Die Suche gliedert die Bauteile nach Gewerk. Gleiche Artikelnummern werden als e
 
 Python, Git und Node muss die andere Person nicht installieren. Das gilt für Windows und für den Mac (Apple-Silicon und Intel).
 
-Auf dem Rechner, auf dem die App schon läuft, einmal bauen. `npm run dev` vorher beenden.
+Auf dem Rechner, auf dem die App schon läuft, einmal bauen. Node 22 oder neuer reicht, auch Node 24. `npm run dev` vorher beenden.
 
 ```bash
 npm install

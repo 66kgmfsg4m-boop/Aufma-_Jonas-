@@ -24,7 +24,7 @@ import { crc32, deflateRawSync } from "node:zlib";
 const root = process.cwd();
 const dist = path.join(root, "dist");
 const cache = path.join(dist, "cache");
-const nodeVersion = process.version.startsWith("v22.") ? process.version : "v22.23.4";
+let nodeVersion = process.version;
 
 const windowsRoot = "Aufmass-Windows";
 const macRoot = "Aufmass-Mac";
@@ -158,7 +158,7 @@ async function nodeArchive(name) {
   } catch (error) {
     fail(
       error instanceof Error
-        ? `${error.message}. Node ${nodeVersion} gibt es nicht für alle Systeme. Node 22 installieren und erneut packen.`
+        ? `${error.message}. Node ${nodeVersion} gibt es nicht für alle Systeme.`
         : String(error),
     );
   }
@@ -380,11 +380,29 @@ function requireNodeBinary(file, label) {
   if (!existsSync(file)) fail(`${label} wurde nicht gefunden: ${file}`);
 }
 
+function nodeMajor(version) {
+  return Number(/^v(\d+)\./.exec(version)?.[1] ?? 0);
+}
+
+async function resolveNodeVersion() {
+  const direct = await fetch(`https://nodejs.org/dist/${process.version}/SHASUMS256.txt`, { method: "HEAD" });
+  if (direct.ok) return process.version;
+  const response = await fetch("https://nodejs.org/dist/index.json");
+  if (!response.ok) fail(`Node ${process.version} ist nicht zum Mitpacken verfügbar.`);
+  const index = await response.json();
+  const sameMajor = index.find((entry) => nodeMajor(entry.version) === nodeMajor(process.version));
+  const fallback = sameMajor ?? index.find((entry) => nodeMajor(entry.version) === 22);
+  if (!fallback?.version) fail(`Node ${process.version} ist nicht zum Mitpacken verfügbar.`);
+  console.log(`Node ${process.version} wird nicht mitgegeben. Stattdessen ${fallback.version}.`);
+  return fallback.version;
+}
+
 async function main() {
   assertTar();
-  if (!process.version.startsWith("v22.")) {
-    fail(`Packen braucht Node 22, gefunden wurde ${process.version}.`);
+  if (nodeMajor(process.version) < 22) {
+    fail(`Packen braucht Node 22 oder neuer, gefunden wurde ${process.version}.`);
   }
+  nodeVersion = await resolveNodeVersion();
   mkdirSync(cache, { recursive: true });
   console.log(`Node für die Pakete: ${nodeVersion}`);
 
