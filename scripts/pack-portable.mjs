@@ -193,7 +193,16 @@ function extractArchive(archive, dest) {
     } catch {
       // GNU tar does not read zip archives. unzip does, and Windows tar does too.
     }
-    execFileSync("unzip", ["-q", archive, "-d", dest], { stdio: "inherit" });
+    try {
+      execFileSync("unzip", ["-q", archive, "-d", dest], { stdio: "inherit" });
+    } catch (error) {
+      const missing = error && typeof error === "object" && "code" in error && error.code === "ENOENT";
+      fail(
+        missing
+          ? "Die Windows-Node-Datei konnte nicht entpackt werden. Windows 10 oder neuer bringt tar mit."
+          : `Archiv konnte nicht entpackt werden: ${path.basename(archive)}`,
+      );
+    }
     return;
   }
   execFileSync("tar", ["-xf", archive, "-C", dest], { stdio: "inherit" });
@@ -417,7 +426,9 @@ async function main() {
     console.log("Vorhandenen Build verwenden.");
   } else {
     console.log("Baue die App…");
-    execFileSync("npm", ["run", "build"], { cwd: root, stdio: "inherit" });
+    const nextBin = path.join(root, "node_modules", "next", "dist", "bin", "next");
+    if (!existsSync(nextBin)) fail("Next.js fehlt. Im Projektordner zuerst npm install ausführen.");
+    execFileSync(process.execPath, [nextBin, "build"], { cwd: root, stdio: "inherit" });
   }
 
   const winDir = path.join(dist, windowsRoot);
