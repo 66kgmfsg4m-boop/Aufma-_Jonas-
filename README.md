@@ -38,6 +38,8 @@ Erkannt werden Artikelnummer, Bezeichnung, Einheit (Stück, Meter, m², m³ und 
 
 Unter `examples/` liegen zwei Rechnungen (Pollin, Elektrohandel Wandelt). „Beispielbestand laden“ auf der Suche und „Beispielrechnungen laden“ beim Import lesen sie mit demselben Parser und legen die Preise in die Bibliothek.
 
+Gleiche Artikelnummern werden als ein Bauteil gezeigt. Neben jedem Einkaufspreis steht der Verkaufspreis mit 20 % Aufschlag. Unter Aufträge wählst du Positionen und Mengen. Die gedruckte Rechnung verwendet nur diese Verkaufspreise.
+
 ## Weitergeben
 
 Mit Docker, die Bibliothek bleibt im Volume:

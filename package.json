@@ -8,7 +8,7 @@
     "build": "next build",
     "start": "next start -p 47291 -H 0.0.0.0",
     "lint": "eslint",
-    "test": "node --experimental-strip-types --import ./tests/register.ts --test tests/parse.test.ts"
+    "test": "node --experimental-strip-types --import ./tests/register.ts --test tests/parse.test.ts tests/pricing.test.ts"
   },
   "dependencies": {
     "class-variance-authority": "^0.7.1",

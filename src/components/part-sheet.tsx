@@ -1,6 +1,7 @@
 "use client";
 
 import { requestJson } from "@/components/api";
+import { TakePartButton } from "@/components/take-part-button";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -13,6 +14,7 @@ import {
 } from "@/components/ui/sheet";
 import { docTypeLabel, formatEuro, formatNumber, formatUnit, formatWhen } from "@/lib/format";
 import { parseGermanNumber } from "@/lib/parse/text";
+import { sellPrice } from "@/lib/pricing";
 import type { Part } from "@/lib/types";
 import { Loader2Icon } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -131,15 +133,28 @@ function PartForm({
         </SheetDescription>
       </SheetHeader>
       <div className="flex flex-col gap-4 px-4 pb-6">
-        <div className="rounded-xl border border-border bg-background/50 p-4">
-          <p className="text-xs text-muted-foreground">{formatUnit(unit)}</p>
-          <p className="price mt-1 text-3xl">{formatEuro(parseGermanNumber(priceText) ?? part.unitPrice)}</p>
-          {part.priceBasis > 1 ? (
-            <p className="mt-1 text-xs text-muted-foreground">
-              Ursprünglich je {part.priceBasis} {unit || "Einheiten"} geführt
+        <div className="grid grid-cols-2 gap-3">
+          <div className="rounded-xl border border-border bg-background/50 p-4">
+            <p className="font-mono text-[10px] tracking-[0.14em] text-muted-foreground uppercase">Einkauf</p>
+            <p className="mt-1 text-xl text-muted-foreground tabular-nums">
+              {formatEuro(parseGermanNumber(priceText) ?? part.unitPrice)}
             </p>
-          ) : null}
+            <p className="mt-1 text-xs text-muted-foreground">{formatUnit(unit)}</p>
+          </div>
+          <div className="rounded-xl border border-primary/30 bg-primary/10 p-4">
+            <p className="font-mono text-[10px] tracking-[0.14em] text-primary uppercase">VK +20 %</p>
+            <p className="price mt-1 text-xl">
+              {formatEuro(sellOf(parseGermanNumber(priceText) ?? part.unitPrice))}
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">Basis der Rechnung</p>
+          </div>
         </div>
+        {part.priceBasis > 1 ? (
+          <p className="-mt-2 text-xs text-muted-foreground">
+            Ursprünglich je {part.priceBasis} {unit || "Einheiten"} geführt
+          </p>
+        ) : null}
+        <TakePartButton part={{ ...part, unitPrice: parseGermanNumber(priceText) ?? part.unitPrice, name, unit, articleNumber }} />
         <div className="grid gap-3">
           <Field label="Artikelnummer" value={articleNumber} onChange={setArticleNumber} />
           <Field label="Bezeichnung" value={name} onChange={setName} />
@@ -189,7 +204,10 @@ function PartForm({
                         {docTypeLabel(other.docType)} · {formatWhen(other.importedAt)}
                       </span>
                     </span>
-                    <span className="price text-base">{formatEuro(other.unitPrice)}</span>
+                    <span className="text-right">
+                      <span className="block text-[11px] text-muted-foreground">EK {formatEuro(other.unitPrice)}</span>
+                      <span className="price text-base">{formatEuro(sellOf(other.unitPrice))}</span>
+                    </span>
                   </button>
                 </li>
               ))}
@@ -199,6 +217,11 @@ function PartForm({
       </div>
     </>
   );
+}
+
+function sellOf(value: number | null): number | null {
+  if (value == null) return null;
+  return sellPrice(value);
 }
 
 function Field({

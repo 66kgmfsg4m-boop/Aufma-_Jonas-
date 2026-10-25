@@ -28,6 +28,17 @@ export function formatNumber(value: number | null | undefined): string {
   }).format(value);
 }
 
+const berlinDay = new Intl.DateTimeFormat("de-DE", {
+  timeZone: "Europe/Berlin",
+  dateStyle: "long",
+});
+
+export function formatDay(iso?: string): string {
+  const date = iso ? new Date(iso) : new Date();
+  if (Number.isNaN(date.getTime())) return "";
+  return berlinDay.format(date);
+}
+
 export function formatWhen(iso: string): string {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return "";

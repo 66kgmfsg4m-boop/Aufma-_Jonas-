@@ -84,6 +84,46 @@ export type SearchResponse = {
   mode: "recent" | "search";
 };
 
+export type OrderLine = {
+  id: string;
+  orderId: string;
+  partId: string;
+  articleNumber: string;
+  name: string;
+  unit: string;
+  quantity: number;
+  unitCost: number;
+  unitSell: number;
+  lineTotal: number;
+  supplier: string;
+  sourceFile: string;
+  position: number;
+};
+
+export type JobOrder = {
+  id: string;
+  seq: number;
+  number: string;
+  title: string;
+  customer: string;
+  createdAt: string;
+  updatedAt: string;
+  lines: OrderLine[];
+  sellTotal: number;
+};
+
+export type OrderSummary = {
+  id: string;
+  seq: number;
+  number: string;
+  title: string;
+  customer: string;
+  createdAt: string;
+  updatedAt: string;
+  lineCount: number;
+  sellTotal: number;
+};
+
 export const FIELDS: Field[] = [
   "article",
   "name",

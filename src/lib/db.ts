@@ -4,10 +4,13 @@ import { DatabaseSync, type SqlValue } from "node:sqlite";
 import { fold } from "@/lib/parse/text";
 import type { DocType, Part, PriceDocument } from "@/lib/types";
 
-const globalDb = globalThis as typeof globalThis & { __aufmass?: DatabaseSync };
+const globalDb = globalThis as typeof globalThis & {
+  __aufmass?: DatabaseSync;
+  __aufmassOrders?: boolean;
+};
 
 function database(): DatabaseSync {
-  if (globalDb.__aufmass) return globalDb.__aufmass;
+  if (!globalDb.__aufmass) {
   const dir = path.join(process.cwd(), "data");
   fs.mkdirSync(dir, { recursive: true });
   const db = new DatabaseSync(path.join(dir, "aufmass.db"), {
@@ -43,7 +46,44 @@ function database(): DatabaseSync {
     CREATE INDEX IF NOT EXISTS idx_parts_supplier ON parts(supplier);
   `);
   globalDb.__aufmass = db;
-  return db;
+  }
+  if (!globalDb.__aufmassOrders) {
+    ensureOrderTables(globalDb.__aufmass!);
+    globalDb.__aufmassOrders = true;
+  }
+  return globalDb.__aufmass;
+}
+
+export function openDatabase(): DatabaseSync {
+  return database();
+}
+
+function ensureOrderTables(db: DatabaseSync) {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS orders (
+      id TEXT PRIMARY KEY,
+      seq INTEGER NOT NULL,
+      number TEXT NOT NULL,
+      title TEXT NOT NULL,
+      customer TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS order_lines (
+      id TEXT PRIMARY KEY,
+      order_id TEXT NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+      part_id TEXT NOT NULL DEFAULT '',
+      article_number TEXT NOT NULL DEFAULT '',
+      name TEXT NOT NULL,
+      unit TEXT NOT NULL DEFAULT '',
+      quantity REAL NOT NULL,
+      unit_cost REAL NOT NULL,
+      supplier TEXT NOT NULL DEFAULT '',
+      source_file TEXT NOT NULL DEFAULT '',
+      position INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE INDEX IF NOT EXISTS idx_order_lines_order ON order_lines(order_id);
+  `);
 }
 
 function text(value: SqlValue | undefined): string {
@@ -202,7 +242,7 @@ export function searchParts(query: SearchQuery): {
   ];
   const totalRow = db.prepare(`SELECT COUNT(*) AS c FROM parts ${where}`).get(...params);
   const total = num(totalRow?.c) ?? 0;
-  const limit = q ? 250 : 60;
+  const limit = 2000;
   const rows = db
     .prepare(
       `SELECT * FROM parts ${where}

@@ -1,8 +1,8 @@
 "use client";
 
 import { LIBRARY_CHANGED, notifyLibraryChanged, requestJson } from "@/components/api";
+import { PartGroupList } from "@/components/part-groups";
 import { PartSheet } from "@/components/part-sheet";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -12,7 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { docTypeLabel, formatEuro, formatUnit, formatWhen } from "@/lib/format";
+import { groupParts } from "@/lib/groups";
 import type { LibraryStats, Part, SearchResponse } from "@/lib/types";
 import { Loader2Icon, SearchIcon, UploadIcon } from "lucide-react";
 import Link from "next/link";
@@ -87,7 +87,7 @@ export function SearchView() {
   }, []);
 
   const items = useMemo(() => data?.items ?? [], [data]);
-  const cheapest = useMemo(() => cheapestByArticle(items), [items]);
+  const groups = useMemo(() => groupParts(items), [items]);
   const unfiltered = !query.trim() && unit === "all" && supplier === "all" && docType === "all";
   const libraryEmpty =
     unfiltered && (stats?.partCount === 0 || (data?.mode === "recent" && data.total === 0));
@@ -113,8 +113,9 @@ export function SearchView() {
         Stück- und Meterpreise
       </h1>
       <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted-foreground md:text-base">
-        Jede gespeicherte Position aus Rechnung oder Katalog. Gleiche Artikelnummern lassen sich
-        über die Großhändler hinweg vergleichen.
+        Dieselbe Artikelnummer erscheint als ein Bauteil. Darunter stehen die Preise der Quellen,
+        jeweils mit Einkauf und dem Verkaufspreis von 20 % darauf. In die Rechnung geht nur der
+        Verkaufspreis.
       </p>
       <div className="relative mt-6">
         <SearchIcon className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -175,63 +176,11 @@ export function SearchView() {
           <>
             <p className="mb-3 text-sm text-muted-foreground">
               {data?.mode === "recent"
-                ? `Zuletzt gespeichert · ${data.total} Preise in der Bibliothek`
-                : `${data?.total ?? items.length} Treffer`}
+                ? `${groups.length} Bauteile · ${data.total} Preise in der Bibliothek`
+                : `${groups.length} Bauteile · ${data?.total ?? items.length} Preise`}
               {loading ? " · wird aktualisiert" : ""}
             </p>
-            <ul className="grid gap-2 md:hidden">
-              {items.map((item) => (
-                <li key={item.id}>
-                  <PartButton
-                    item={item}
-                    cheap={cheapest.get(item.articleNumber.toLowerCase()) === item.id}
-                    onOpen={() => setActive(item)}
-                  />
-                </li>
-              ))}
-            </ul>
-            <div className="hidden overflow-hidden rounded-xl border border-border md:block">
-              <table className="w-full text-sm">
-                <thead className="bg-card/80 text-left text-[11px] tracking-[0.14em] text-muted-foreground uppercase">
-                  <tr>
-                    <th className="px-4 py-3 font-medium">Artikel</th>
-                    <th className="px-4 py-3 font-medium">Bauteil</th>
-                    <th className="px-4 py-3 font-medium">Einheit</th>
-                    <th className="px-4 py-3 font-medium">Preis</th>
-                    <th className="px-4 py-3 font-medium">Quelle</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {items.map((item) => (
-                    <tr
-                      key={item.id}
-                      className="cursor-pointer border-t border-border hover:bg-muted/40"
-                      onClick={() => setActive(item)}
-                    >
-                      <td className="px-4 py-3 font-mono text-xs text-foreground">
-                        {item.articleNumber || "—"}
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className="block">{item.name || "Ohne Bezeichnung"}</span>
-                        {cheapest.get(item.articleNumber.toLowerCase()) === item.id ? (
-                          <Badge variant="secondary" className="mt-1">
-                            günstigster
-                          </Badge>
-                        ) : null}
-                      </td>
-                      <td className="px-4 py-3 text-muted-foreground">{formatUnit(item.unit)}</td>
-                      <td className="price px-4 py-3 text-base">{formatEuro(item.unitPrice)}</td>
-                      <td className="px-4 py-3 text-muted-foreground">
-                        <span className="block text-foreground">{item.supplier}</span>
-                        <span className="text-xs">
-                          {docTypeLabel(item.docType)} · {formatWhen(item.importedAt)}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <PartGroupList parts={items} onOpen={setActive} />
           </>
         )}
       </div>
@@ -263,42 +212,6 @@ export function SearchView() {
         }}
       />
     </div>
-  );
-}
-
-function PartButton({
-  item,
-  cheap,
-  onOpen,
-}: {
-  item: Part;
-  cheap: boolean;
-  onOpen: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onOpen}
-      className="w-full rounded-xl border border-border bg-card/70 p-3 text-left"
-    >
-      <span className="flex items-start justify-between gap-3">
-        <span>
-          <span className="block font-mono text-[11px] text-muted-foreground">
-            {item.articleNumber || "ohne Nummer"}
-          </span>
-          <span className="mt-0.5 block text-sm">{item.name || "Ohne Bezeichnung"}</span>
-        </span>
-        <span className="price text-lg">{formatEuro(item.unitPrice)}</span>
-      </span>
-      <span className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-        <span>{formatUnit(item.unit)}</span>
-        <span>·</span>
-        <span>{item.supplier}</span>
-        <span>·</span>
-        <span>{docTypeLabel(item.docType)}</span>
-        {cheap ? <Badge variant="secondary">günstigster</Badge> : null}
-      </span>
-    </button>
   );
 }
 
@@ -362,19 +275,3 @@ function FilterSelect({
   );
 }
 
-function cheapestByArticle(items: Part[]): Map<string, string> {
-  const best = new Map<string, Part>();
-  const counts = new Map<string, number>();
-  for (const item of items) {
-    const key = item.articleNumber.trim().toLowerCase();
-    if (!key || item.unitPrice == null) continue;
-    counts.set(key, (counts.get(key) ?? 0) + 1);
-    const current = best.get(key);
-    if (!current || (current.unitPrice ?? Infinity) > item.unitPrice) best.set(key, item);
-  }
-  const winners = new Map<string, string>();
-  for (const [key, item] of best) {
-    if ((counts.get(key) ?? 0) > 1) winners.set(key, item.id);
-  }
-  return winners;
-}

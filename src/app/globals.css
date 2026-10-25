@@ -115,3 +115,22 @@
     mask-image: radial-gradient(ellipse at 15% 0%, black 0%, transparent 68%);
   }
 }
+
+@media print {
+  aside,
+  header,
+  .no-print,
+  .ledger-grid {
+    display: none !important;
+  }
+  body {
+    background: white !important;
+  }
+  .invoice-sheet {
+    box-shadow: none !important;
+    border-radius: 0 !important;
+  }
+  @page {
+    margin: 14mm;
+  }
+}

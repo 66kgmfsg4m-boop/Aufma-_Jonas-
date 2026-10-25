@@ -4,7 +4,7 @@ import { requestJson, LIBRARY_CHANGED } from "@/components/api";
 import { formatWhen } from "@/lib/format";
 import type { LibraryStats } from "@/lib/types";
 import { cn } from "cn";
-import { FolderOpenIcon, RulerIcon, SearchIcon, UploadIcon } from "lucide-react";
+import { ClipboardListIcon, FolderOpenIcon, RulerIcon, SearchIcon, UploadIcon } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
@@ -13,6 +13,7 @@ const links = [
   { href: "/", label: "Suche", icon: SearchIcon },
   { href: "/import", label: "Import", icon: UploadIcon },
   { href: "/quellen", label: "Quellen", icon: FolderOpenIcon },
+  { href: "/auftraege", label: "Aufträge", icon: ClipboardListIcon },
 ];
 
 export function Shell({ children }: { children: ReactNode }) {
